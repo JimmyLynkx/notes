@@ -127,4 +127,17 @@ Pod 的 `spec` 中包含一个 `restartPolicy` 字段，其可能取值包�
 
 节点亲和性
 
+##  Controller
+
+```shell
+kubectl create deployment web --image=nginx --dry-run -o yaml > web.yaml
+
+kubectl apply -f web.yaml
+
+kubectl expose deployment web --port=80 --type=NodePort --target-port=80 --name=web1 -o yaml > web1.yaml
+
+
+```
+
+
 
