@@ -107,10 +107,6 @@ Pod 的 `spec` 中包含一个 `restartPolicy` 字段，其可能取值包�
    - **OnFailure 重启策略**：
      - 状态仍然是 `Running`，因为被杀掉的容器会被重启。
 
-
-
-
-
 ### 拉取策略&资源限制
 
 ![](C:\Users\Administrator\AppData\Roaming\marktext\images\2024-06-04-16-36-33-image.png)
@@ -127,7 +123,7 @@ Pod 的 `spec` 中包含一个 `restartPolicy` 字段，其可能取值包�
 
 节点亲和性
 
-##  Controller
+## Controller
 
 ```shell
 kubectl create deployment web --image=nginx --dry-run -o yaml > web.yaml
@@ -135,9 +131,16 @@ kubectl create deployment web --image=nginx --dry-run -o yaml > web.yaml
 kubectl apply -f web.yaml
 
 kubectl expose deployment web --port=80 --type=NodePort --target-port=80 --name=web1 -o yaml > web1.yaml
-
-
 ```
 
+Deployment描述了定义的pod的相关信息
+
+Deployment 资源会根据其配置创建一个或多个 Pod，并确保这些 Pod 运行在集群中。Deployment 控制器会监控这些 Pod，并确保它们保持在期望的状态。例如，如果 Pod 崩溃或被删除，Deployment 控制器会自动创建新的 Pod 来替代它们。
+
+## 技术文章链接
+
+[最新、最全、最详细的 K8S 学习笔记总结（2021最新版）！建议收藏](https://segmentfault.com/a/1190000039844000)
+
+[k8s-学习笔记总结（从入门到放弃的学习路线） 原创](https://blog.csdn.net/qq_21187515/article/details/112359593)
 
 
