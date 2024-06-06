@@ -143,4 +143,179 @@ Deployment 资源会根据其配置创建一个或多个 Pod，并确保这些 P
 
 [k8s-学习笔记总结（从入门到放弃的学习路线） 原创](https://blog.csdn.net/qq_21187515/article/details/112359593)
 
+[霞的云原生之旅: Deploy Kubernetes](https://juejin.cn/post/7292041370893778983)
+
+
+
+为什么要关闭swap分区？
+
+1、基于其出发点，k8s希望将资源限制在一个严格，精确可控范围内:  
+
+Kubernetes 云原生的实现目的是将运行实例紧密包装到尽可能接近 100％:  
+所有的部署、运行环境应该与 CPU 以及内存限定在一个可控的空间内。所以如果调度程序发送一个 Pod 到某一台节点机器，它不应该使用 Swap。如果使用swap，则其实node的pod使用内存总和可能超过了node的内存，这样其实就达不到资源的严格限制和管理的目的  
+
+2、为了性能和服务的稳定性  
+
+若开启 Swap ，将会减慢速度。因此，关闭 Swap 也有一部分是为了性能考虑。  
+原因是kubelet不是为了处理交换情况而设计的，Kubernetes团队不打算实现这一点，因为目标是pod应该适合主机的内存。打开这个之后，不稳定，pod可能使用内存也可以使用交换，这样对服务不稳定，而且无法保证pod申请的内存应该是真正使用的内存，  
+还可能运行运行着，服务用的内存越来越多，导致已有服务可能部分内存不用的时候释放掉，再申请的时候是被分配到swap了，效率就变了，  
+这样引发的问题很难定位，也很难确定，出现未定义行为
+
+
+
+为什么要关闭selinux?
+
+selinux，这个是用来加强安全性的一个组件，但非常容易出错且难以定位，一般上来装完系统就先给禁用了
+
+ 关闭 SELinux
+
+所有节点关闭 SELinux
+
+> 负载均衡机器必须要关闭,因为6443不是nginx的标准端口,会被selinux拦截, 防火墙也需要放行6443端口, 可以考虑直接关闭
+
+SELINUX有三种状态:
+
+1. permissive: 不阻止任何操作, 但会记录潜在的危险操作. 会打印警告，但不会强制执行安全策略
+2. disabled: 完全关闭
+3. enforcing: 启用SELinux安全保护状态
+   
+   
+
+cat >> /etc/hosts << EOF
+192.168.176.128 master1
+192.168.176.131 worker1
+192.168.176.130 worker2
+EOF
+
+
+
+为什么要配置这一项？
+
+```shell
+# 将桥接的IPv4流量传递到iptables的链
+cat > /etc/sysctl.d/k8s.conf << EOF
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+EOF
+# 生效
+sysctl --system 
+```
+
+```shell
+#安装kubelet、kubeadm、kubectl，同时指定版本
+
+yum install -y kubelet kubeadm kubectl
+
+#设置开机启动
+
+systemctl enable kubelet
+
+kubectl version
+Client Version: v1.28.2
+Kustomize Version: v5.0.4-0.20230601165947-6ce0bf390ce3
+
+kubeadm init --apiserver-advertise-address=192.168.176.128 --image-repository registry.aliyuncs.com/google_containers --kubernetes-version v1.25.5 --service-cidr=10.96.0.0/12 --pod-network-cidr=10.244.0.0/16
+
+WARNING Firewalld]: firewalld is active, please ensure ports [6443 10250] are open or your cluster may not function correctly
+[WARNING Swap]: swap is enabled; production deployments should disable swap unless testing the NodeSwap feature gate of the kubelet
+error execution phase preflight: [preflight] Some fatal errors occurred:
+[ERROR CRI]: container runtime is not running: output: time="2024-06-05T23:37:27-07:00" level=fatal msg="validate service connection: CRI v1 runtime API is not implemented for endpoint "unix:///var/run/containerd/containerd.sock": rpc error: code = Unimplemented desc = unknown service runtime.v1.RuntimeService"
+, error: exit status 1
+### there is no dockershim in kubernetes v1.24 you'll need to install and configure containerd or cri-o
+```
+
+```markdown
+2. 配置containerd
+
+2.1 生成默认配置文件
+
+创建配置目录并生成默认配置文件：
+
+
+ Copy code
+sudo mkdir -p /etc/containerd
+sudo containerd config default | sudo tee /etc/containerd/config.toml
+
+2.2 修改配置文件
+
+编辑 /etc/containerd/config.toml 文件，确保 SystemdCgroup 设置为 true：
+
+
+ Copy code
+sudo nano /etc/containerd/config.toml
+
+找到 [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options] 部分，将 SystemdCgroup 设置为 true：
+
+
+ Copy code
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
+  SystemdCgroup = true
+
+保存并退出编辑器。
+
+
+2.3 启动并启用 containerd
+
+启动 containerd 服务并设置开机自启动：
+
+
+ Copy code
+sudo systemctl restart containerd
+sudo systemctl enable containerd
+
+3. 配置Kubelet使用containerd
+
+3.1 创建或编辑Kubelet配置文件
+
+编辑 /etc/sysconfig/kubelet 文件，添加或修改以下配置以指向 containerd 的 socket：
+
+
+ Copy code
+sudo nano /etc/sysconfig/kubelet
+
+添加以下行：
+
+
+ Copy code
+KUBELET_EXTRA_ARGS="--container-runtime=remote --container-runtime-endpoint=unix:///run/containerd/containerd.sock"
+
+保存并退出编辑器。
+
+
+3.2 重新启动Kubelet服务
+
+重新加载 systemd 配置并重启 Kubelet 服务：
+
+
+ Copy code
+sudo systemctl daemon-reload
+sudo systemctl restart kubelet
+
+4. 验证
+
+确保 containerd 和 kubelet 服务运行正常：
+
+
+ Copy code
+sudo systemctl status containerd
+sudo systemctl status kubelet
+
+如果服务状态显示为 active (running)，则表示配置成功。
+
+
+```
+
+```shell
+sudo firewall-cmd --permanent --add-port=6443/tcp
+sudo firewall-cmd --permanent --add-port=10250/tcp
+sudo firewall-cmd --permanent --add-port=2379-2380/tcp # etcd服务器客户端通信
+sudo firewall-cmd --permanent --add-port=10251/tcp # kube-scheduler
+sudo firewall-cmd --permanent --add-port=10252/tcp # kube-controller-manager
+sudo firewall-cmd --permanent --add-port=30000-32767/tcp # NodePort服务
+```
+
+
+
+
+
 
